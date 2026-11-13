@@ -100,7 +100,7 @@ if (window[key] && window[key].active) {
             unorderedItems: (text.match(/^\s*-\s/gm) || []).length,
             orderedItems: (text.match(/^\s*\d+\.\s/gm) || []).length,
             markdownLinks: (text.match(/\[[^\]]+\]\([^)]+\)/g) || []).length,
-            urls: (text.match(/https?:\/\//gi) || []).length,
+            urls: (text.match(new RegExp("https?://", "gi")) || []).length,
             citationLikeMarkers: (text.match(/\[\d+\]|cite|\(Source:?\s*\d+\)/gi) || []).length,
             sourceUiText: /\b(show all|show less|related searches|sources)\b/i.test(text),
             codeFences: (text.match(/```/g) || []).length
