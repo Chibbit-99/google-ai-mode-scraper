@@ -94,6 +94,10 @@ jobs:
 
           for filename in filter(None, tracked):
               path = Path(filename)
+              # Never rewrite workflow files: the Actions token cannot push
+              # workflow changes without the separate Workflows permission.
+              if path.parts[:2] == (".github", "workflows"):
+                  continue
               if not path.is_file():
                   continue
               try:
