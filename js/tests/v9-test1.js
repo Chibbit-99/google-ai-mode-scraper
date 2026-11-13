@@ -110,13 +110,18 @@ if (window[key] && window[key].active) {
         var findings = {
             characters: text.length,
             headings: countLines(function (line) {
-                return /^#{1,6}\s/.test(line);
+                var trimmed = line.trim();
+                var hashes = 0;
+                while (trimmed.charAt(hashes) === "#") hashes++;
+                return hashes > 0 && hashes <= 6 && trimmed.charAt(hashes) === " ";
             }),
             unorderedItems: countLines(function (line) {
-                return /^\s*-\s/.test(line);
+                return line.trim().indexOf("- ") === 0;
             }),
             orderedItems: countLines(function (line) {
-                return /^\s*\d+\.\s/.test(line);
+                var trimmed = line.trim();
+                var dot = trimmed.indexOf(". ");
+                return dot > 0 && !isNaN(Number(trimmed.slice(0, dot)));
             }),
             markdownLinks: countText("]("),
             urls: countText("http://") + countText("https://"),
@@ -126,7 +131,6 @@ if (window[key] && window[key].active) {
             }),
             codeFences: countText("```")
         };
-
         if (testId === "structures") {
             findings.hasTable = countLines(function (line) {
                 return line.indexOf("|") !== -1;
