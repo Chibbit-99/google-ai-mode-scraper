@@ -461,8 +461,8 @@ var serializeTable = table => {
         [...row.children]
             .filter(cell => ["TH", "TD"].includes(cell.tagName))
             .map(cell => serializeInline(cell)
-                .replace(/\\s*\\n\\s*/g, " ")
-                .replace(/\\|/g, "\\\\|")
+                .replace(/\s*\n\s*/g, " ")
+                .replace(/\|/g, "\\|")
                 .trim())
     ).filter(row => row.length);
     if (!rows.length) return "";
@@ -471,20 +471,20 @@ var serializeTable = table => {
     var header = rows[0];
     var separator = header.map(() => "---");
     return ["| " + header.join(" | ") + " |", "| " + separator.join(" | ") + " |"]
-        .concat(rows.slice(1).map(row => "| " + row.join(" | ") + " |")).join("\\n");
+        .concat(rows.slice(1).map(row => "| " + row.join(" | ") + " |")).join("\n");
 };
 
 var serializeCodeBlock = pre => {
     var code = pre.querySelector("code");
     var source = code || pre;
     var content = (source.innerText || source.textContent || "")
-        .replace(/\\r\\n/g, "\\n").replace(/\\s+$/, "");
+        .replace(/\r\n/g, "\n").replace(/\s+$/, "");
     if (!content.trim()) return "";
-    var classes = ((pre.className || "") + " " + (code && code.className || "")).split(/\\s+/);
+    var classes = ((pre.className || "") + " " + (code && code.className || "")).split(/\s+/);
     var languageClass = classes.find(name => name.indexOf("language-") === 0 || name.indexOf("lang-") === 0) || "";
     var language = languageClass.replace(/^language-/, "").replace(/^lang-/, "");
     var fence = content.indexOf("````") !== -1 ? "`````" : "```";
-    return fence + language + "\\n" + content + "\\n" + fence;
+    return fence + language + "\n" + content + "\n" + fence;
 };
 // ==================================================
 // BLOCK SERIALIZATION
