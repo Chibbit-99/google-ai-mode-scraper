@@ -94,23 +94,50 @@ if (window[key] && window[key].active) {
 
     var inspectMarkdown = function (markdown, testId) {
         var text = markdown || "";
+        var lines = text.split("\n");
+        var countLines = function (test) {
+            return lines.filter(test).length;
+        };
+        var countText = function (needle) {
+            var count = 0;
+            var position = 0;
+            while ((position = text.indexOf(needle, position)) !== -1) {
+                count++;
+                position += needle.length || 1;
+            }
+            return count;
+        };
         var findings = {
             characters: text.length,
-            headings: (text.match(/^#{1,6}\s/gm) || []).length,
-            unorderedItems: (text.match(/^\s*-\s/gm) || []).length,
-            orderedItems: (text.match(/^\s*\d+\.\s/gm) || []).length,
-            markdownLinks: (text.match(/\[[^\]]+\]\([^)]+\)/g) || []).length,
-            urls: (text.match(new RegExp("https?://", "gi")) || []).length,
-            citationLikeMarkers: (text.match(/\[\d+\]|cite|\(Source:?\s*\d+\)/gi) || []).length,
-            sourceUiText: /\b(show all|show less|related searches|sources)\b/i.test(text),
-            codeFences: (text.match(/```/g) || []).length
+            headings: countLines(function (line) {
+                return /^#{1,6}\s/.test(line);
+            }),
+            unorderedItems: countLines(function (line) {
+                return /^\s*-\s/.test(line);
+            }),
+            orderedItems: countLines(function (line) {
+                return /^\s*\d+\.\s/.test(line);
+            }),
+            markdownLinks: countText("]("),
+            urls: countText("http://") + countText("https://"),
+            citationLikeMarkers: countText("cite") + countText("[1]") + countText("[2]") + countText("[3]") + countText("(Source:"),
+            sourceUiText: ["show all", "show less", "related searches", "sources"].some(function (word) {
+                return text.toLowerCase().indexOf(word) !== -1;
+            }),
+            codeFences: countText("```")
         };
 
         if (testId === "structures") {
-            findings.hasTable = /^\|.+\|$/m.test(text) && /^\|?\s*:?-{3,}/m.test(text);
-            findings.hasBold = /\*\*.+?\*\*/s.test(text);
-            findings.hasItalic = /(?<!\*)\*[^*\n]+\*(?!\*)/.test(text);
-            findings.hasNestedIndent = /^\s{2,}-\s/m.test(text);
+            findings.hasTable = countLines(function (line) {
+                return line.indexOf("|") !== -1;
+            }) >= 2 && countLines(function (line) {
+                return line.indexOf("---") !== -1;
+            }) > 0;
+            findings.hasBold = text.indexOf("**") !== -1;
+            findings.hasItalic = text.indexOf("*") !== -1;
+            findings.hasNestedIndent = countLines(function (line) {
+                return line.indexOf("  - ") === 0 || line.indexOf("    - ") === 0 || line.indexOf("\t- ") === 0;
+            }) > 0;
         }
 
         return findings;
