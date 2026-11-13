@@ -96,21 +96,21 @@ if (window[key] && window[key].active) {
         var text = markdown || "";
         var findings = {
             characters: text.length,
-            headings: (text.match(/^#{1,6}\\s/gm) || []).length,
-            unorderedItems: (text.match(/^\\s*-\\s/gm) || []).length,
-            orderedItems: (text.match(/^\\s*\\d+\\.\\s/gm) || []).length,
-            markdownLinks: (text.match(/\\[[^\\]]+\\]\\([^)]+\\)/g) || []).length,
-            urls: (text.match(/https?:\\/\\//gi) || []).length,
-            citationLikeMarkers: (text.match(/\\[\\d+\\]|cite|\\(Source:?\\s*\\d+\\)/gi) || []).length,
-            sourceUiText: /\\b(show all|show less|related searches|sources)\\b/i.test(text),
+            headings: (text.match(/^#{1,6}\s/gm) || []).length,
+            unorderedItems: (text.match(/^\s*-\s/gm) || []).length,
+            orderedItems: (text.match(/^\s*\d+\.\s/gm) || []).length,
+            markdownLinks: (text.match(/\[[^\]]+\]\([^)]+\)/g) || []).length,
+            urls: (text.match(/https?:\/\//gi) || []).length,
+            citationLikeMarkers: (text.match(/\[\d+\]|cite|\(Source:?\s*\d+\)/gi) || []).length,
+            sourceUiText: /\b(show all|show less|related searches|sources)\b/i.test(text),
             codeFences: (text.match(/```/g) || []).length
         };
 
         if (testId === "structures") {
-            findings.hasTable = /^\\|.+\\|$/m.test(text) && /^\\|?\\s*:?-{3,}/m.test(text);
-            findings.hasBold = /\\*\\*.+?\\*\\*/s.test(text);
-            findings.hasItalic = /(?<!\\*)\\*[^*\\n]+\\*(?!\\*)/.test(text);
-            findings.hasNestedIndent = /^\\s{2,}-\\s/m.test(text);
+            findings.hasTable = /^\|.+\|$/m.test(text) && /^\|?\s*:?-{3,}/m.test(text);
+            findings.hasBold = /\*\*.+?\*\*/s.test(text);
+            findings.hasItalic = /(?<!\*)\*[^*\n]+\*(?!\*)/.test(text);
+            findings.hasNestedIndent = /^\s{2,}-\s/m.test(text);
         }
 
         return findings;
