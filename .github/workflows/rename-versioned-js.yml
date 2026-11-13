@@ -79,25 +79,14 @@ jobs:
                   output.write("changed=false\n")
               sys.exit(0)
 
-          # Rename through temporary names first, allowing safe swaps if ever needed.
-          temporary = []
-          for index, (source, target) in enumerate(planned):
-              temp = source.with_name(f".rename-tmp-{index}-{source.name}")
-              source.rename(temp)
-              temporary.append((temp, target))
-
-          for temp, target in temporary:
-              target.parent.mkdir(parents=True, exist_ok=True)
-              temp.rename(target)
-
-          # Update references to renamed filenames in tracked UTF-8 text files.
+          # Update references while the original tracked paths still exist.
           replacements = {
               source.as_posix(): target.as_posix()
               for source, target in planned
           }
           tracked = subprocess.check_output(
               ["git", "ls-files", "-z"], text=True
-          ).split("\0")
+          ).split("\\0")
 
           for filename in filter(None, tracked):
               path = Path(filename)
@@ -116,6 +105,17 @@ jobs:
               if updated != original:
                   path.write_text(updated, encoding="utf-8")
                   print(f"Updated references in {path}")
+
+          # Rename through temporary names first, allowing safe swaps if ever needed.
+          temporary = []
+          for index, (source, target) in enumerate(planned):
+              temp = source.with_name(f".rename-tmp-{index}-{source.name}")
+              source.rename(temp)
+              temporary.append((temp, target))
+
+          for temp, target in temporary:
+              target.parent.mkdir(parents=True, exist_ok=True)
+              temp.rename(target)
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write("changed=true\n")
