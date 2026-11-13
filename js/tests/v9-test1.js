@@ -15,13 +15,11 @@
  * - DevTools snippets use var (no top-level let/const).
  */
 
-(function () {
-    var key = "__v9Test1";
+var key = "__v9Test1";
 
-    if (window[key] && window[key].active) {
-        console.warn("[v9-test1] Previous test runner is already active.");
-        return;
-    }
+if (window[key] && window[key].active) {
+    console.warn("[v9-test1] Previous test runner is already active.");
+} else {
 
     var cases = {
         citations: {
@@ -277,4 +275,4 @@
 
     log("Test runner installed.");
     help();
-})();
+}
