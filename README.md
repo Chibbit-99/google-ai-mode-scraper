@@ -27,7 +27,7 @@ The extractor observes the response DOM, identifies the newly-created AI Mode re
 js/
   v10.js
   tests/
-    v10-test-auto.js
+    v1.0.0-test-auto.js
 ```
 
 ## Requirements
@@ -105,7 +105,7 @@ The test runner sends several prompts to Google AI Mode and checks the resulting
 
 1. Open Google AI Mode and make sure the **Ask anything** text area is available.
 2. Open DevTools Console.
-3. Copy and run the contents of [`js/tests/v10-test-auto.js`](js/tests/v10-test-auto.js).
+3. Copy and run the contents of [`js/tests/v1.0.0-test-auto.js`](js/tests/v1.0.0-test-auto.js).
 4. Start the test suite:
 
 ```js
