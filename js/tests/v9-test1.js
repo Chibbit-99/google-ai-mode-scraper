@@ -255,7 +255,7 @@
             "1) Citations: begin('citations'); set v9.js prompt to cases.citations.prompt; run v9.js; after [COMPLETE], end().\n" +
             "2) Consecutive: begin('consecutive'); run v9.js with prompts[0], end(); then begin('consecutive','Consecutive question 2'); run v9.js with prompts[1], end().\n" +
             "3) Structures: begin('structures'); set v9.js prompt to cases.structures.prompt; run v9.js; after [COMPLETE], end().\n" +
-            "4) Lifecycle: begin('lifecycle'); run v9.js; after [COMPLETE], call stopAndCheck(); then begin('lifecycle','Restart run'); run v9.js again with a fresh prompt; after [COMPLETE], end().\n" +
+            "4) Lifecycle: begin('lifecycle'); run v9.js with the RAM/storage prompt; while it is STILL STREAMING, call stopAndCheck(); then begin('lifecycle','Restart run'); run v9.js again with a fresh prompt; after [COMPLETE], end().\n" +
             "Use report() to see all recorded results."
         );
         console.table(Object.keys(cases).map(function (id) {
