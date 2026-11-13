@@ -30,6 +30,23 @@ js/
     v1.0.0-test-auto.js
 ```
 
+## Versioned filenames (manual)
+
+JavaScript filenames use semantic versions. Version-file renames are maintained manually; this repository does not use a GitHub Actions workflow to rename them.
+
+The shorthand used by older files is converted as follows:
+
+| Previous filename | Semantic-version filename |
+| --- | --- |
+| `v1.js` | `v0.1.0.js` |
+| `v5.6.js` | `v0.5.6.js` |
+| `v6-remastered.js` | `v0.6.0-remastered.js` |
+| `v10.js` | `v1.0.0.js` |
+| `v9-test1.js` | `v0.9.0-test1.js` |
+| `v10-test-auto.js` | `v1.0.0-test-auto.js` |
+
+Keep any descriptive suffix (such as `-remastered` or `-test-auto`) after the version number. When renaming a file, also update references to its old path or filename in the README, test runners, and other repository files.
+
 ## Requirements
 
 - Google AI Mode open in a desktop browser.
