@@ -4,7 +4,7 @@ A browser-console experiment for extracting Google AI Mode replies as Markdown w
 
 The extractor observes the response DOM, identifies the newly-created AI Mode reply, and serializes its content into Markdown. It also records mutation-level diagnostics so you can inspect whether text is appearing incrementally in the page rather than only being collected after generation finishes.
 
-> **Current stable version: v10** — the v10 automated integration runner passed all 5 checks in a live Google AI Mode session.
+> **Current stable version: v1.0.0** — the v1.0.0 automated integration runner passed all 5 checks in a live Google AI Mode session.
 
 ## Features
 
@@ -25,34 +25,23 @@ The extractor observes the response DOM, identifies the newly-created AI Mode re
 
 ```text
 js/
-  v10.js
+  v1.0.0.js
   tests/
     v1.0.0-test-auto.js
 ```
 
-## Versioned filenames (manual)
+## Versioned filenames
 
-JavaScript filenames use semantic versions. Version-file renames are maintained manually; this repository does not use a GitHub Actions workflow to rename them.
+JavaScript files use semantic-version filenames. The current extractor is `js/v1.0.0.js`, and its automated integration runner is `js/tests/v1.0.0-test-auto.js`.
 
-The shorthand used by older files is converted as follows:
-
-| Previous filename | Semantic-version filename |
-| --- | --- |
-| `v1.js` | `v0.1.0.js` |
-| `v5.6.js` | `v0.5.6.js` |
-| `v6-remastered.js` | `v0.6.0-remastered.js` |
-| `v10.js` | `v1.0.0.js` |
-| `v9-test1.js` | `v0.9.0-test1.js` |
-| `v10-test-auto.js` | `v1.0.0-test-auto.js` |
-
-Keep any descriptive suffix (such as `-remastered` or `-test-auto`) after the version number. When renaming a file, also update references to its old path or filename in the README, test runners, and other repository files.
+When adding a version, use the `vMAJOR.MINOR.PATCH` format and keep descriptive suffixes after the version (for example, `-test-auto`).
 
 ## Requirements
 
 - Google AI Mode open in a desktop browser.
 - A page state where the **Ask anything** text area is available.
 - Browser DevTools with a Console.
-- An internet connection to load the automated test runner's copy of `js/v10.js` from GitHub.
+- An internet connection to load the automated test runner's copy of `js/v1.0.0.js` from GitHub.
 
 The extractor is designed around the current Google AI Mode page structure. Google can change that structure at any time, which may require updates to the selectors or boundary detection.
 
@@ -60,7 +49,7 @@ The extractor is designed around the current Google AI Mode page structure. Goog
 
 1. Open Google AI Mode.
 2. Open the browser's Developer Tools and select the **Console**.
-3. Open [`js/v10.js`](js/v10.js) in this repository and copy its contents.
+3. Open [`js/v1.0.0.js`](js/v10.js) in this repository and copy its contents.
 4. Paste the script into the Console and run it.
 5. The script submits the prompt configured near the top of the file and waits for the reply.
 
@@ -118,7 +107,7 @@ Starting the script again stops the previous extractor before creating a new run
 
 ## Automated integration tests
 
-The test runner sends several prompts to Google AI Mode and checks the resulting extraction. It fetches the current `js/v10.js` directly from this repository, so it tests the committed version rather than a separately pasted copy.
+The test runner sends several prompts to Google AI Mode and checks the resulting extraction. It fetches the current `js/v1.0.0.js` directly from this repository, so it tests the committed version rather than a separately pasted copy.
 
 1. Open Google AI Mode and make sure the **Ask anything** text area is available.
 2. Open DevTools Console.
@@ -166,14 +155,14 @@ The completion logic uses the page's standard completion text when available, wi
 
 ## Versions
 
-- **v10** — current stable version. Adds Markdown table and fenced code-block serialization, with structural collection support for both.
-- **v9** — adds diagnostics for duplicate character-mutation records and batch coalescing.
-- **v8** — adds answer-unit filtering and mutation-batch coalescing.
-- **v7** — adds character-level mutation diagnostics.
-- **v6 Remastered** — adds timestamped diagnostics, mutation statistics, streaming counters and a status controller.
-- **v3–v5.6** — earlier iterations of response detection, boundary selection and Markdown extraction.
+- **v1.0.0** — current stable version. Adds Markdown table and fenced code-block serialization, with structural collection support for both.
+- **v0.9.0** — adds diagnostics for duplicate character-mutation records and batch coalescing.
+- **v0.8.0** — adds answer-unit filtering and mutation-batch coalescing.
+- **v0.7.0** — adds character-level mutation diagnostics.
+- **v0.6.0-remastered** — adds timestamped diagnostics, mutation statistics, streaming counters and a status controller.
+- **v0.3.0–v0.5.6** — earlier iterations of response detection, boundary selection and Markdown extraction.
 
-The v10 implementation is the recommended starting point for further development.
+The v1.0.0 implementation is the recommended starting point for further development.
 
 ## Limitations
 
