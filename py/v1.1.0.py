@@ -258,7 +258,7 @@ def run(args: argparse.Namespace) -> int:
             # <script> element. Google's nonce/strict-dynamic CSP can reject
             # script elements without its per-page nonce. Its current policy
             # explicitly permits unsafe-eval, so eval() is available here.
-            page.evaluate("(script) => (0, eval)(script)", injected)
+            page.evaluate("(script) => { (0, eval)(script); return true; }", injected)
 
             # The extractor submits the prompt asynchronously and exposes its
             # controller immediately, before waiting for Google's response.
