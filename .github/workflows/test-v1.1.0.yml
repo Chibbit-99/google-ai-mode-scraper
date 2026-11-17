@@ -35,7 +35,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       - name: Install Playwright
         run: |
@@ -63,7 +62,6 @@ jobs:
         env:
           AI_PROMPT: ${{ inputs.prompt }}
           AI_TIMEOUT: ${{ inputs.timeout }}
-          PLAYWRIGHT_STORAGE_STATE: ${{ env.PLAYWRIGHT_STORAGE_STATE }}
         shell: bash
         run: |
           set -euo pipefail
