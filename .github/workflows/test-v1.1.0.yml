@@ -1,0 +1,91 @@
+name: Test Google AI Mode scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: Prompt to send to Google AI Mode
+        required: true
+        type: string
+        default: "Explain how a transformer language model generates text."
+      timeout:
+        description: Maximum extraction time in seconds
+        required: true
+        type: number
+        default: 240
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-ai-mode-live-test
+  cancel-in-progress: false
+
+jobs:
+  live-test:
+    name: Live Playwright test
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      # Optional repository secret:
+      # GOOGLE_STORAGE_STATE_B64 = base64-encoded Playwright storage_state JSON.
+      # This is needed only when Google AI Mode requires a signed-in account.
+      - name: Restore optional Google session
+        env:
+          GOOGLE_STORAGE_STATE_B64: ${{ secrets.GOOGLE_STORAGE_STATE_B64 }}
+        run: |
+          if [ -n "$GOOGLE_STORAGE_STATE_B64" ]; then
+            printf '%s' "$GOOGLE_STORAGE_STATE_B64" \
+              | base64 --decode > "$RUNNER_TEMP/google-storage-state.json"
+            echo "PLAYWRIGHT_STORAGE_STATE=$RUNNER_TEMP/google-storage-state.json" >> "$GITHUB_ENV"
+            echo "A Playwright session state was restored."
+          else
+            echo "No Google session secret configured; testing without a signed-in session."
+          fi
+
+      - name: Run live extraction test
+        env:
+          AI_PROMPT: ${{ inputs.prompt }}
+          AI_TIMEOUT: ${{ inputs.timeout }}
+          PLAYWRIGHT_STORAGE_STATE: ${{ env.PLAYWRIGHT_STORAGE_STATE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=(
+            --headless
+            --prompt "$AI_PROMPT"
+            --timeout "$AI_TIMEOUT"
+            --ready-timeout 90
+          )
+
+          if [ -n "${PLAYWRIGHT_STORAGE_STATE:-}" ]; then
+            args+=(--storage-state "$PLAYWRIGHT_STORAGE_STATE")
+          fi
+
+          python py/v1.1.0.py "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/google-ai-mode-test.log"
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-ai-mode-test-log
+          path: ${{ runner.temp }}/google-ai-mode-test.log
+          if-no-files-found: ignore
+          retention-days: 7
