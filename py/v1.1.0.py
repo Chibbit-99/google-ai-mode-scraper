@@ -26,6 +26,7 @@ import json
 import re
 import sys
 import time
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Any
 
@@ -308,14 +309,45 @@ def run(args: argparse.Namespace) -> int:
             page = context.pages[0] if context.pages else context.new_page()
             page.set_default_timeout(15_000)
             stream_stats = attach_terminal_stream(page)
-            page.on(
-                "pageerror",
-                lambda error: print(
-                    f"\n[BROWSER PAGE ERROR] {error}",
+            browser_failures: dict[str, Any] = {
+                "google_429": [],
+                "page_errors": [],
+            }
+
+            def on_response(response: Any) -> None:
+                if response.status != 429:
+                    return
+
+                parsed = urlsplit(response.url)
+                host = (parsed.hostname or "").lower()
+                if not (
+                    host.endswith("google.com")
+                    or host.endswith("googleusercontent.com")
+                    or host.endswith("gstatic.com")
+                ):
+                    return
+
+                resource = f"{host}{parsed.path}"
+                if resource not in browser_failures["google_429"]:
+                    browser_failures["google_429"].append(resource)
+
+                print(
+                    f"[GOOGLE HTTP 429] Rate-limited resource: {resource}",
                     file=sys.stderr,
                     flush=True,
-                ),
-            )
+                )
+
+            def on_page_error(error: Any) -> None:
+                message = str(error)
+                browser_failures["page_errors"].append(message)
+                print(
+                    f"\n[BROWSER PAGE ERROR] {message}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+            page.on("response", on_response)
+            page.on("pageerror", on_page_error)
 
             print(f"Opening {args.url} ...", flush=True)
             response = page.goto(
@@ -362,6 +394,43 @@ def run(args: argparse.Namespace) -> int:
             final_status = None
 
             while time.monotonic() < deadline:
+                # Google may rate-limit challenge/bootstrap resources on
+                # hosted runner IPs. If its challenge bootstrap then crashes,
+                # stop early with the real upstream error instead of timing out.
+                challenge_error = next(
+                    (
+                        error for error in browser_failures["page_errors"]
+                        if "solveSimpleChallenge is not defined" in error
+                    ),
+                    None,
+                )
+                if challenge_error:
+                    try:
+                        page.evaluate(
+                            "() => window.__aiModeExtractor && "
+                            "window.__aiModeExtractor.stop()"
+                        )
+                    except PlaywrightError:
+                        pass
+
+                    limited = browser_failures["google_429"]
+                    print(
+                        "\\n[GOOGLE CHALLENGE FAILED] Google's page challenge "
+                        "did not initialise correctly."
+                        + (
+                            "\\nGoogle resources returned HTTP 429: "
+                            + ", ".join(limited[:5])
+                            if limited else ""
+                        )
+                        + "\\nThis is an upstream Google response, not an "
+                        "extractor selector error. Use a legitimate signed-in "
+                        "session where required, or run from a normal local "
+                        "browser session; do not try to bypass Google's challenge.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    return 3
+
                 final_status = page.evaluate(
                     "() => window.__aiModeExtractor.status()"
                 )
