@@ -132,26 +132,79 @@ def attach_terminal_stream(page: Any) -> dict[str, int]:
     return stats
 
 
-def wait_for_prompt_box(page: Any, timeout_seconds: int) -> None:
-    """Wait for the AI Mode composer, failing rather than hanging in CI."""
-    print("\nWaiting for Google's 'Ask anything' box.")
+def page_diagnostics(page: Any) -> dict[str, Any]:
+    """List visible composer-like controls without collecting page content."""
     try:
-        page.locator(TEXTAREA_SELECTOR).wait_for(
-            state="visible",
-            timeout=timeout_seconds * 1000,
+        return page.evaluate("""() => ({
+            url: location.href,
+            title: document.title,
+            controls: [...document.querySelectorAll(
+                'textarea, input, [contenteditable="true"], [role="textbox"]'
+            )].filter(el => {
+                const rect = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                return rect.width > 0 && rect.height > 0 &&
+                       style.visibility !== 'hidden' && style.display !== 'none';
+            }).slice(0, 20).map(el => ({
+                tag: el.tagName,
+                type: el.getAttribute('type'),
+                role: el.getAttribute('role'),
+                ariaLabel: el.getAttribute('aria-label'),
+                placeholder: el.getAttribute('placeholder'),
+                contenteditable: el.getAttribute('contenteditable')
+            }))
+        })""")
+    except PlaywrightError as error:
+        return {"url": getattr(page, "url", "(unknown)"), "diagnostic_error": str(error)}
+
+
+def save_page_debug(page: Any, debug_dir: Path) -> None:
+    """Save selector metadata only, not page HTML or private page text."""
+    try:
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        details = page_diagnostics(page)
+        (debug_dir / "page-diagnostics.json").write_text(
+            json.dumps(details, indent=2, ensure_ascii=False),
+            encoding="utf-8",
         )
-    except PlaywrightTimeoutError as error:
+        print(f"[DEBUG] Selector diagnostics saved to {debug_dir / 'page-diagnostics.json'}", flush=True)
+    except (PlaywrightError, OSError) as error:
+        print(f"[DEBUG] Could not save selector diagnostics: {error}", flush=True)
+
+
+def wait_for_prompt_box(page: Any, timeout_seconds: int, debug_dir: Path) -> None:
+    """Wait for the extractor's composer selector and periodically report state."""
+    selector = page.locator(TEXTAREA_SELECTOR)
+    deadline = time.monotonic() + timeout_seconds
+    next_report = time.monotonic()
+    print(
+        f"Waiting up to {timeout_seconds}s for selector: {TEXTAREA_SELECTOR}",
+        flush=True,
+    )
+
+    while time.monotonic() < deadline:
+        remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
         try:
-            page_title = page.title()
-        except PlaywrightError:
-            page_title = "(unavailable)"
+            selector.wait_for(state="visible", timeout=min(5_000, remaining_ms))
+            print("[READY] Google AI Mode prompt box detected.", flush=True)
+            return
+        except PlaywrightTimeoutError:
+            now = time.monotonic()
+            if now >= next_report:
+                print(
+                    "[WAITING FOR COMPOSER] " + json.dumps(page_diagnostics(page), ensure_ascii=False),
+                    flush=True,
+                )
+                next_report = now + 10
 
-        raise RuntimeError(
-            "Google AI Mode's prompt box did not appear. "
-            f"Current URL: {page.url}; page title: {page_title}. "
-            "The page may require sign-in, consent, or a supported account."
-        ) from error
-
+    details = page_diagnostics(page)
+    save_page_debug(page, debug_dir)
+    raise RuntimeError(
+        "Google AI Mode loaded, but the expected composer selector was not found. "
+        "The redirect to /search?udm=50 is normal for AI Mode; it is not the error. "
+        f"Expected selector: {TEXTAREA_SELECTOR}. "
+        f"Visible input controls: {json.dumps(details, ensure_ascii=False)}"
+    )
 
 def read_prompt() -> str:
     while True:
@@ -237,14 +290,14 @@ def run(args: argparse.Namespace) -> int:
                 ),
             )
 
-            print(f"Opening {args.url} ...")
+            print(f"Opening {args.url} ...", flush=True)
             page.goto(
                 args.url,
                 wait_until="domcontentloaded",
                 timeout=60_000,
             )
 
-            wait_for_prompt_box(page, args.ready_timeout)
+            wait_for_prompt_box(page, args.ready_timeout, args.debug_dir.expanduser().resolve())
 
             prompt = args.prompt.strip() if args.prompt is not None else read_prompt()
             if not prompt:
@@ -253,7 +306,7 @@ def run(args: argparse.Namespace) -> int:
 
             injected = build_injected_script(source, prompt)
 
-            print("\nSubmitting prompt and streaming the response below.\n")
+            print("\nSubmitting prompt and streaming the response below.\n", flush=True)
             # Evaluate through Playwright rather than appending an inline
             # <script> element. Google's nonce/strict-dynamic CSP can reject
             # script elements without its per-page nonce. Its current policy
@@ -383,6 +436,12 @@ def main() -> int:
     parser.add_argument(
         "--prompt",
         help="Prompt to submit; omitting it starts interactive terminal input.",
+    )
+    parser.add_argument(
+        "--debug-dir",
+        type=Path,
+        default=Path("debug-output"),
+        help="Directory for selector diagnostics when the composer is missing.",
     )
     parser.add_argument(
         "--storage-state",
