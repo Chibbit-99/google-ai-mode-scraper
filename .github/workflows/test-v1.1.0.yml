@@ -68,7 +68,6 @@ jobs:
           set -euo pipefail
 
           args=(
-            --headless
             --prompt "$AI_PROMPT"
             --timeout "$AI_TIMEOUT"
             --ready-timeout 90
@@ -78,7 +77,9 @@ jobs:
             args+=(--storage-state "$PLAYWRIGHT_STORAGE_STATE")
           fi
 
-          python py/v1.1.0.py "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/google-ai-mode-test.log"
+          # Use headed Chromium in a virtual display. This distinguishes a
+          # headless-rendering issue from a selector or login issue.
+          xvfb-run -a python py/v1.1.0.py "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/google-ai-mode-test.log"
 
       - name: Upload test log
         if: always()
