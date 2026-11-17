@@ -80,6 +80,17 @@ def attach_terminal_stream(page: Any) -> dict[str, int]:
 
     def on_console(message: Any) -> None:
         if message.type == "error":
+            # Google's page can emit CSP notices for its own inline event
+            # handlers. The extractor does not create HTML event-handler
+            # attributes, so report this separately from runner exceptions.
+            if "Executing inline event handler violates the following Content Security Policy" in message.text:
+                print(
+                    f"\n[BROWSER CSP NOTICE] {message.text}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return
+
             print(f"\n[BROWSER ERROR] {message.text}", file=sys.stderr, flush=True)
             return
 
@@ -243,7 +254,11 @@ def run(args: argparse.Namespace) -> int:
             injected = build_injected_script(source, prompt)
 
             print("\nSubmitting prompt and streaming the response below.\n")
-            page.add_script_tag(content=injected)
+            # Evaluate through Playwright rather than appending an inline
+            # <script> element. Google's nonce/strict-dynamic CSP can reject
+            # script elements without its per-page nonce. Its current policy
+            # explicitly permits unsafe-eval, so eval() is available here.
+            page.evaluate("(script) => (0, eval)(script)", injected)
 
             # The extractor submits the prompt asynchronously and exposes its
             # controller immediately, before waiting for Google's response.
