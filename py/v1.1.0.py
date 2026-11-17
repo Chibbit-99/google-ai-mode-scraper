@@ -415,14 +415,14 @@ def run(args: argparse.Namespace) -> int:
 
                     limited = browser_failures["google_429"]
                     print(
-                        "\\n[GOOGLE CHALLENGE FAILED] Google's page challenge "
+                        "\n[GOOGLE CHALLENGE FAILED] Google's page challenge "
                         "did not initialise correctly."
                         + (
-                            "\\nGoogle resources returned HTTP 429: "
+                            "\nGoogle resources returned HTTP 429: "
                             + ", ".join(limited[:5])
                             if limited else ""
                         )
-                        + "\\nThis is an upstream Google response, not an "
+                        + "\nThis is an upstream Google response, not an "
                         "extractor selector error. Use a legitimate signed-in "
                         "session where required, or run from a normal local "
                         "browser session; do not try to bypass Google's challenge.",
