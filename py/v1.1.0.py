@@ -133,30 +133,55 @@ def attach_terminal_stream(page: Any) -> dict[str, int]:
 
 
 def page_diagnostics(page: Any) -> dict[str, Any]:
-    """List visible composer-like controls without collecting page content."""
+    """Summarize page rendering and visible controls without dumping page text."""
     try:
-        return page.evaluate("""() => ({
-            url: location.href,
-            title: document.title,
-            controls: [...document.querySelectorAll(
-                'textarea, input, [contenteditable="true"], [role="textbox"]'
-            )].filter(el => {
+        return page.evaluate("""() => {
+            const visible = el => {
                 const rect = el.getBoundingClientRect();
                 const style = getComputedStyle(el);
                 return rect.width > 0 && rect.height > 0 &&
                        style.visibility !== 'hidden' && style.display !== 'none';
-            }).slice(0, 20).map(el => ({
-                tag: el.tagName,
-                type: el.getAttribute('type'),
-                role: el.getAttribute('role'),
-                ariaLabel: el.getAttribute('aria-label'),
-                placeholder: el.getAttribute('placeholder'),
-                contenteditable: el.getAttribute('contenteditable')
-            }))
-        })""")
+            };
+            const body = document.body;
+            const bodyText = body ? (body.innerText || '').toLowerCase() : '';
+            const controls = [...document.querySelectorAll(
+                'textarea, input, [contenteditable="true"], [role="textbox"]'
+            )];
+            return {
+                url: location.href,
+                title: document.title,
+                readyState: document.readyState,
+                bodyTextLength: body ? (body.innerText || '').length : 0,
+                bodyChildCount: body ? body.children.length : 0,
+                scriptCount: document.scripts.length,
+                iframeCount: document.querySelectorAll('iframe').length,
+                mainCount: document.querySelectorAll('main').length,
+                visibleControls: controls.filter(visible).slice(0, 20).map(el => ({
+                    tag: el.tagName,
+                    type: el.getAttribute('type'),
+                    role: el.getAttribute('role'),
+                    ariaLabel: el.getAttribute('aria-label'),
+                    placeholder: el.getAttribute('placeholder'),
+                    contenteditable: el.getAttribute('contenteditable')
+                })),
+                pageIndicators: {
+                    captcha: bodyText.includes('captcha') || bodyText.includes('unusual traffic'),
+                    signIn: bodyText.includes('sign in'),
+                    consent: bodyText.includes('before you continue'),
+                    javascriptDisabled: bodyText.includes('enable javascript') || bodyText.includes('javascript is not enabled'),
+                    blocked: bodyText.includes('our systems have detected') || bodyText.includes('automated queries')
+                },
+                bodyChildren: body ? [...body.children].slice(0, 12).map(el => ({
+                    tag: el.tagName,
+                    id: el.id || null,
+                    role: el.getAttribute('role'),
+                    className: (typeof el.className === 'string' ? el.className : '').slice(0, 120),
+                    textLength: (el.innerText || '').length
+                })) : []
+            };
+        }""")
     except PlaywrightError as error:
         return {"url": getattr(page, "url", "(unknown)"), "diagnostic_error": str(error)}
-
 
 def save_page_debug(page: Any, debug_dir: Path) -> None:
     """Save selector metadata only, not page HTML or private page text."""
@@ -203,7 +228,7 @@ def wait_for_prompt_box(page: Any, timeout_seconds: int, debug_dir: Path) -> Non
         "Google AI Mode loaded, but the expected composer selector was not found. "
         "The redirect to /search?udm=50 is normal for AI Mode; it is not the error. "
         f"Expected selector: {TEXTAREA_SELECTOR}. "
-        f"Visible input controls: {json.dumps(details, ensure_ascii=False)}"
+        f"Page rendering diagnostics: {json.dumps(details, ensure_ascii=False)}"
     )
 
 def read_prompt() -> str:
@@ -254,7 +279,7 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"Google AI Mode terminal runner v{VERSION}")
     print(f"Extractor: {script_path}")
-    print(f"Browser mode: {'headless' if args.headless else 'headed'}")
+    print(f"Browser mode: {'headless' if args.headless else 'headed'}", flush=True)
 
     browser = None
     context = None
@@ -291,11 +316,21 @@ def run(args: argparse.Namespace) -> int:
             )
 
             print(f"Opening {args.url} ...", flush=True)
-            page.goto(
+            response = page.goto(
                 args.url,
                 wait_until="domcontentloaded",
                 timeout=60_000,
             )
+            print(
+                f"[NAVIGATION] HTTP {response.status if response else 'unknown'} "
+                f"| final URL: {page.url}",
+                flush=True,
+            )
+            try:
+                page.wait_for_load_state("load", timeout=15_000)
+            except PlaywrightTimeoutError:
+                print("[NAVIGATION] Full load event did not fire within 15s; continuing.", flush=True)
+            print("[PAGE AFTER LOAD] " + json.dumps(page_diagnostics(page), ensure_ascii=False), flush=True)
 
             wait_for_prompt_box(page, args.ready_timeout, args.debug_dir.expanduser().resolve())
 
