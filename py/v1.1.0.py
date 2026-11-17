@@ -201,7 +201,7 @@ def wait_for_prompt_box(page: Any, timeout_seconds: int, debug_dir: Path) -> Non
     """Wait for the extractor's composer selector and periodically report state."""
     # Google currently renders two matching composers; v1.0.0.js uses
     # document.querySelector(), so wait for the first matching textarea.
-    selector = page.locator(TEXTAREA_SELECTOR).first()
+    selector = page.locator(TEXTAREA_SELECTOR).first
     deadline = time.monotonic() + timeout_seconds
     next_report = time.monotonic()
     print(
