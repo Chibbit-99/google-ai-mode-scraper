@@ -2,19 +2,21 @@
 """
 Google AI Mode terminal runner — v1.1.0
 
-Launches a persistent Playwright Chromium profile, opens Google AI Mode,
-loads ../js/v1.0.0.js, asks for a prompt in the terminal, and streams the
-extractor's Markdown output back to the terminal.
+Launches Google AI Mode with Playwright, injects js/v1.0.0.js, submits a
+terminal/CLI prompt, and streams the extractor's Markdown output to stdout.
 
-Install:
+Local install:
     python -m pip install playwright
     python -m playwright install chromium
 
-Run from any working directory:
+Local interactive run:
     python py/v1.1.0.py
 
-The first run opens a fresh browser profile. Sign in to Google in that
-window; the session is retained in ~/.local/share/google-ai-mode-scraper.
+Headless/CI run:
+    python py/v1.1.0.py --headless --prompt "Explain quantum entanglement"
+
+For CI accounts that require Google sign-in, provide a Playwright storage-state
+JSON file with --storage-state. Treat that file like a password.
 """
 
 from __future__ import annotations
@@ -84,8 +86,6 @@ def attach_terminal_stream(page: Any) -> dict[str, int]:
         label = ""
         payload: Any = None
 
-        # Playwright exposes console arguments separately. Reading them this
-        # way preserves the exact Markdown string (including leading spaces).
         try:
             args = message.args
             if len(args) >= 2:
@@ -96,7 +96,7 @@ def attach_terminal_stream(page: Any) -> dict[str, int]:
 
         marker = next((item for item in STREAM_MARKERS if item in label), None)
 
-        # Fallback for browser/Playwright versions that do not expose args.
+        # Fallback for Playwright versions that do not expose console args.
         if marker is None:
             text = message.text
             marker = next((item for item in STREAM_MARKERS if item in text), None)
@@ -121,20 +121,25 @@ def attach_terminal_stream(page: Any) -> dict[str, int]:
     return stats
 
 
-def wait_for_prompt_box(page: Any) -> None:
-    """Wait until AI Mode is ready; allow manual sign-in/consent in the browser."""
+def wait_for_prompt_box(page: Any, timeout_seconds: int) -> None:
+    """Wait for the AI Mode composer, failing rather than hanging in CI."""
     print("\nWaiting for Google's 'Ask anything' box.")
-    print("Complete any sign-in or consent steps in the opened browser window.")
-
-    while True:
+    try:
+        page.locator(TEXTAREA_SELECTOR).wait_for(
+            state="visible",
+            timeout=timeout_seconds * 1000,
+        )
+    except PlaywrightTimeoutError as error:
         try:
-            page.locator(TEXTAREA_SELECTOR).wait_for(
-                state="visible",
-                timeout=30_000,
-            )
-            return
-        except PlaywrightTimeoutError:
-            print("Still waiting for the AI Mode prompt box...")
+            page_title = page.title()
+        except PlaywrightError:
+            page_title = "(unavailable)"
+
+        raise RuntimeError(
+            "Google AI Mode's prompt box did not appear. "
+            f"Current URL: {page.url}; page title: {page_title}. "
+            "The page may require sign-in, consent, or a supported account."
+        ) from error
 
 
 def read_prompt() -> str:
@@ -155,6 +160,11 @@ def read_prompt() -> str:
 def run(args: argparse.Namespace) -> int:
     script_path: Path = args.script.expanduser().resolve()
     profile_dir: Path = args.profile_dir.expanduser().resolve()
+    storage_state: Path | None = (
+        args.storage_state.expanduser().resolve()
+        if args.storage_state
+        else None
+    )
 
     if not script_path.is_file():
         print(f"Extractor not found: {script_path}", file=sys.stderr)
@@ -164,30 +174,57 @@ def run(args: argparse.Namespace) -> int:
         )
         return 1
 
+    if storage_state and not storage_state.is_file():
+        print(f"Storage-state file not found: {storage_state}", file=sys.stderr)
+        return 1
+
     source = script_path.read_text(encoding="utf-8")
     if "window.__aiModeExtractor" not in source:
-        print("The selected JavaScript file does not look like the v1.0.0 extractor.",
-              file=sys.stderr)
+        print(
+            "The selected JavaScript file does not look like the v1.0.0 extractor.",
+            file=sys.stderr,
+        )
         return 1
 
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Google AI Mode terminal runner v{VERSION}")
     print(f"Extractor: {script_path}")
-    print(f"Browser profile: {profile_dir}")
+    print(f"Browser mode: {'headless' if args.headless else 'headed'}")
+
+    browser = None
+    context = None
 
     with sync_playwright() as playwright:
-        context = playwright.chromium.launch_persistent_context(
-            user_data_dir=str(profile_dir),
-            headless=False,
-            viewport=None,
-            args=["--start-maximized"],
-        )
-
         try:
+            if args.headless or storage_state:
+                # CI uses an ephemeral browser context. Optional storage state
+                # restores an authenticated Google session.
+                browser = playwright.chromium.launch(headless=args.headless)
+                context = browser.new_context(
+                    storage_state=str(storage_state) if storage_state else None,
+                    viewport={"width": 1440, "height": 1000},
+                )
+            else:
+                # Local interactive runs retain the Google login between runs.
+                context = playwright.chromium.launch_persistent_context(
+                    user_data_dir=str(profile_dir),
+                    headless=False,
+                    viewport=None,
+                    args=["--start-maximized"],
+                )
+
             page = context.pages[0] if context.pages else context.new_page()
             page.set_default_timeout(15_000)
             stream_stats = attach_terminal_stream(page)
+            page.on(
+                "pageerror",
+                lambda error: print(
+                    f"\n[BROWSER PAGE ERROR] {error}",
+                    file=sys.stderr,
+                    flush=True,
+                ),
+            )
 
             print(f"Opening {args.url} ...")
             page.goto(
@@ -196,10 +233,11 @@ def run(args: argparse.Namespace) -> int:
                 timeout=60_000,
             )
 
-            wait_for_prompt_box(page)
-            prompt = read_prompt()
+            wait_for_prompt_box(page, args.ready_timeout)
+
+            prompt = args.prompt.strip() if args.prompt is not None else read_prompt()
             if not prompt:
-                print("Exiting without submitting a prompt.")
+                print("No prompt supplied; exiting without submitting.")
                 return 0
 
             injected = build_injected_script(source, prompt)
@@ -207,8 +245,8 @@ def run(args: argparse.Namespace) -> int:
             print("\nSubmitting prompt and streaming the response below.\n")
             page.add_script_tag(content=injected)
 
-            # The extractor submits the prompt asynchronously and exposes a
-            # status controller as soon as its script starts.
+            # The extractor submits the prompt asynchronously and exposes its
+            # controller immediately, before waiting for Google's response.
             page.wait_for_function(
                 "() => !!(window.__aiModeExtractor && "
                 "typeof window.__aiModeExtractor.status === 'function')",
@@ -222,10 +260,8 @@ def run(args: argparse.Namespace) -> int:
                 final_status = page.evaluate(
                     "() => window.__aiModeExtractor.status()"
                 )
-
                 if final_status.get("finished"):
                     break
-
                 time.sleep(0.4)
             else:
                 print(
@@ -241,8 +277,8 @@ def run(args: argparse.Namespace) -> int:
             if not final_status.get("responseDetected"):
                 print(
                     "\n[NO RESPONSE DETECTED] The extractor stopped before "
-                    "finding a new AI Mode reply. Check the browser page and "
-                    "Google's current DOM/selectors.",
+                    "finding a new AI Mode reply. Check Google's current "
+                    "page structure and account access.",
                     file=sys.stderr,
                 )
                 return 2
@@ -250,10 +286,17 @@ def run(args: argparse.Namespace) -> int:
             markdown = page.evaluate(
                 "() => window.lastExtractedMarkdown || ''"
             )
+            if not markdown.strip():
+                print(
+                    "\n[EMPTY RESPONSE] A reply was detected, but no Markdown "
+                    "was extracted.",
+                    file=sys.stderr,
+                )
+                return 2
 
-            # The normal path streams all content live. Print the final
-            # snapshot only when no stream events were received.
-            if markdown and not (
+            # Usually the complete output has already streamed. This fallback
+            # covers cases where the browser console did not emit stream events.
+            if not (
                 stream_stats["blocks"]
                 or stream_stats["chunks"]
                 or stream_stats["edits"]
@@ -262,7 +305,7 @@ def run(args: argparse.Namespace) -> int:
 
             elapsed = final_status.get("elapsed", "unknown")
             print(
-                "\n\n[COMPLETE] "
+                "\n\n[TEST PASSED] "
                 f"{elapsed} | "
                 f"{stream_stats['blocks']} blocks, "
                 f"{stream_stats['chunks']} chunks, "
@@ -278,7 +321,10 @@ def run(args: argparse.Namespace) -> int:
             print(f"\n[ERROR] {error}", file=sys.stderr)
             return 1
         finally:
-            context.close()
+            if context is not None:
+                context.close()
+            if browser is not None:
+                browser.close()
 
 
 def main() -> int:
@@ -300,18 +346,42 @@ def main() -> int:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=180,
-        help="Maximum seconds to wait for the extractor to finish (default: 180).",
+        default=240,
+        help="Maximum seconds to wait for extraction to finish (default: 240).",
+    )
+    parser.add_argument(
+        "--ready-timeout",
+        type=int,
+        default=90,
+        help="Seconds to wait for the Google AI Mode prompt box (default: 90).",
     )
     parser.add_argument(
         "--url",
         default=AI_MODE_URL,
         help=f"Google AI Mode URL (default: {AI_MODE_URL})",
     )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run Chromium without a visible browser window (for CI).",
+    )
+    parser.add_argument(
+        "--prompt",
+        help="Prompt to submit; omitting it starts interactive terminal input.",
+    )
+    parser.add_argument(
+        "--storage-state",
+        type=Path,
+        help="Optional Playwright storage-state JSON file for Google sign-in.",
+    )
     args = parser.parse_args()
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1 second")
+    if args.ready_timeout < 1:
+        parser.error("--ready-timeout must be at least 1 second")
+    if args.prompt is not None and not args.prompt.strip():
+        parser.error("--prompt cannot be empty")
 
     return run(args)
 
