@@ -189,7 +189,7 @@ def run(args: argparse.Namespace) -> int:
             page.set_default_timeout(15_000)
             stream_stats = attach_terminal_stream(page)
 
-            print(f"Opening {AI_MODE_URL} ...")
+            print(f"Opening {args.url} ...")
             page.goto(
                 args.url,
                 wait_until="domcontentloaded",
