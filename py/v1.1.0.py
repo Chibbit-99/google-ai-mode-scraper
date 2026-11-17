@@ -191,7 +191,7 @@ def run(args: argparse.Namespace) -> int:
 
             print(f"Opening {AI_MODE_URL} ...")
             page.goto(
-                AI_MODE_URL,
+                args.url,
                 wait_until="domcontentloaded",
                 timeout=60_000,
             )
@@ -312,10 +312,6 @@ def main() -> int:
 
     if args.timeout < 1:
         parser.error("--timeout must be at least 1 second")
-
-    # Keep the URL override local to this run.
-    global AI_MODE_URL
-    AI_MODE_URL = args.url
 
     return run(args)
 
